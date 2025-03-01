@@ -113,17 +113,29 @@ class KeaSync(jobs.Job):
             # Build the option data parameter list
             option_data = []
             if len(resolved_prefix["dns"]) > 0:
-                dns_servers = {
-                    "data": ",".join(resolved_prefix["dns"]),
-                    "name": "domain-name-servers",
-                }
+                if resolved_prefix["afi"] == 4:
+                    dns_servers = {
+                        "data": ",".join(resolved_prefix["dns"]),
+                        "name": "domain-name-servers",
+                    }
+                if resolved_prefix["afi"] == 6:
+                    dns_servers = {
+                        "data": ",".join(resolved_prefix["dns"]),
+                        "name": "dns-servers",
+                    }
                 option_data.append(dns_servers)
             if len(resolved_prefix["ntp"]) > 0:
-                dns_servers = {
-                    "data": ",".join(resolved_prefix["ntp"]),
-                    "name": "ntp-servers",
-                }
-                option_data.append(dns_servers)
+                if resolved_prefix["afi"] == 4:
+                    ntp_servers = {
+                        "data": ",".join(resolved_prefix["ntp"]),
+                        "name": "ntp-servers",
+                    }
+                if resolved_prefix["afi"] == 6:
+                    ntp_servers = {
+                        "data": ",".join(resolved_prefix["ntp"]),
+                        "name": "sntp-servers",
+                    }
+                option_data.append(ntp_servers)
             if len(resolved_prefix["gateway"]) > 0:
                 gateway = {
                     "data": ",".join(resolved_prefix["gateway"]),
