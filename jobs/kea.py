@@ -1,3 +1,5 @@
+import ipaddress
+
 from nautobot.apps import jobs
 from nautobot.dcim.models import Interface
 from nautobot.extras.models import Relationship, RelationshipAssociation, Role
@@ -132,7 +134,12 @@ class KeaSync(jobs.Job):
             kea_subnet["option-data"] = option_data
             subnet_pools = []
             for dhcp_pool in resolved_prefix["dhcp_pools"]:
-                subnet_pools.append({"pool": dhcp_pool})
+                # If we define this as an CIDR, the network and broadcast will be used as well
+                # Therefore, dark magic
+                dhcp_pool_network = ipaddress.ip_network(dhcp_pool)
+                subnet_pools.append(
+                    {"pool": f"{dhcp_pool_network[1]} - {dhcp_pool_network[-2]}"}
+                )
             kea_subnet["pools"] = subnet_pools
 
             if resolved_prefix["afi"] == 4 and (len(resolved_prefix["dhcp_pools"]) > 0):
