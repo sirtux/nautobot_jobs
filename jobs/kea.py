@@ -1,9 +1,9 @@
 import ipaddress
 
 from nautobot.apps import jobs
-from nautobot.dcim.models import Interface
+from nautobot.dcim.models import Interface, Device
 from nautobot.extras.models import Relationship, RelationshipAssociation, Role
-from nautobot.ipam.models import Service, Prefix, IPAddress
+from nautobot.ipam.models import Service, Prefix, IPAddress, IPAddressToInterface
 from pykeadhcp import Kea
 import json
 
@@ -167,6 +167,35 @@ class KeaSync(jobs.Job):
                 f"Resolved IPv6 subnets: {kea_subnets_ipv6}",
                 extra={"object": dhcp_server["service"]},
             )
+
+            # Let's get the reservations for this prefix up and running
+            # The initial release is only for v4
+            if prefix.ip_version == 4:
+                reservations = []
+                # Get all IPs which have an interface assigned to it.
+                assigned_addresses = IPAddress.objects.filter(
+                    parent=prefix, interfaces__isnull=False
+                )
+                for assigned_address in assigned_addresses:
+                    host_ip = assigned_address.host
+                    interface_id = IPAddressToInterface.objects.get(
+                        ip_address=assigned_address.id
+                    ).interface_id
+                    host_interface = Interface.objects.get(id=interface_id)
+                    if host_interface.mac_address is not None:
+                        host_mac = str(host_interface.mac_address)
+                        host = Device.objects.get(id=host_interface.device_id)
+                        host_name = host.name.split(".")[0]
+
+                        host_reservation = {
+                            "hw-address": host_mac,
+                            "ip-address": host_ip,
+                            "hostname": host_name,
+                        }
+                        reservations.append(host_reservation)
+
+                kea_subnet["reservations"] = reservations
+
             subnet_counter += 1
 
     def kea_send_and_save_config(
