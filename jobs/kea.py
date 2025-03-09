@@ -7,7 +7,6 @@ from nautobot.ipam.models import Service, Prefix, IPAddress, IPAddressToInterfac
 from pykeadhcp import Kea
 import json
 
-from social_django.urls import extra
 
 name = "Kea related jobs"
 
@@ -92,6 +91,15 @@ class KeaSync(jobs.Job):
 
         self.kea_send_and_save_config(dhcp4_config, dhcp6_config, dhcp_server, kea_api)
 
+    def find_interface_on_dhcpserver_for_subnet(self, prefix, dhcp_server):
+        self.logger.debug(
+            "Searching for associated interface", extra={"object": prefix}
+        )
+        for device_interface in dhcp_server["dhcp_server_device"].interfaces.all():
+            ips = IPAddress.objects.filter(parent=prefix, interfaces=device_interface)
+            if len(ips) > 0:
+                return device_interface.name
+
     def kea_create_subnet_objects(
         self, dhcp_server, kea_subnets_ipv4, kea_subnets_ipv6, subnets
     ):
@@ -106,9 +114,9 @@ class KeaSync(jobs.Job):
             # Begin configuring the subnet
             kea_subnet = {}
             kea_subnet["id"] = subnet_counter
-            kea_subnet[
-                "subnet"
-            ] = f"{resolved_prefix['network']}/{resolved_prefix['prefix_length']}"
+            kea_subnet["subnet"] = (
+                f"{resolved_prefix['network']}/{resolved_prefix['prefix_length']}"
+            )
 
             # Build the option data parameter list
             option_data = []
@@ -153,6 +161,10 @@ class KeaSync(jobs.Job):
                     {"pool": f"{dhcp_pool_network[1]} - {dhcp_pool_network[-2]}"}
                 )
             kea_subnet["pools"] = subnet_pools
+
+            kea_subnet["interface"] = self.find_interface_on_dhcpserver_for_subnet(
+                prefix, dhcp_server
+            )
 
             if resolved_prefix["afi"] == 4 and (len(resolved_prefix["dhcp_pools"]) > 0):
                 kea_subnets_ipv4.append(kea_subnet)
@@ -240,12 +252,12 @@ class KeaSync(jobs.Job):
             f"Adding {dhcp_server_interface_names} to server config",
             extra={"object": dhcp_server["dhcp_server_device"]},
         )
-        dhcp4_config.arguments["Dhcp4"]["interfaces-config"][
-            "interfaces"
-        ] = dhcp_server_interface_names
-        dhcp6_config.arguments["Dhcp6"]["interfaces-config"][
-            "interfaces"
-        ] = dhcp_server_interface_names
+        dhcp4_config.arguments["Dhcp4"]["interfaces-config"]["interfaces"] = (
+            dhcp_server_interface_names
+        )
+        dhcp6_config.arguments["Dhcp6"]["interfaces-config"]["interfaces"] = (
+            dhcp_server_interface_names
+        )
 
     def read_kea_secrets(self, dhcp_server):
         self.logger.debug("Reading the secrets")
